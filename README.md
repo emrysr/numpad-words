@@ -1,6 +1,22 @@
 # numpad-words
 Predictive text mapping for 9-key/numeric keypads powered by the SUBTLEX frequency corpus.
 
+# demo
+
+vue proof of concept app:
+
+https://numpad-words.vercel.app/
+
+
+# get started
+
+clone this repo and run the vite app:
+`npm run dev`
+
+or use the node.js tui to get the same lookup in the terminal
+`npm run tui`
+
+
 # keypad-predict
 
 Single-tap text entry for a numeric keypad, in the browser.

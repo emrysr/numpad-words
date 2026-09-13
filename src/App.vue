@@ -356,12 +356,7 @@ onUnmounted(() => {
       <header class="block">
         <h1 class="title is-4"><a class="reset-link" :href="baseUrl">Quick-type on a numpad</a></h1>
         <p class="subtitle is-6">Press a number once for any of its letters - no cycling needed.</p>
-        <div class="is-flex is-justify-content-space-between is-flex-wrap-wrap">
-          <p class="help">try: {{ sampleHint }}</p>
-          <button type="button" class="button is-small" commandfor="tips-dialog" command="show-modal" @click="openTips">
-            tips
-          </button>
-        </div>
+        <p class="help">try: {{ sampleHint }}</p>
       </header>
 
       <dialog id="tips-dialog" ref="tipsDialog" class="tips-dialog" @click="closeTipsOnBackdropClick">
@@ -427,6 +422,11 @@ onUnmounted(() => {
         </div>
       </main>
 
+      <footer>
+        <button type="button" class="button is-small" commandfor="tips-dialog" command="show-modal" @click="openTips">
+            tips
+          </button>
+      </footer>
     </div>
 </template>
 

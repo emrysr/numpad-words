@@ -78,6 +78,36 @@ function manualCharsFor(digit: string): string {
   return (digit === '1' ? KEY_1_SYMBOLS : DIGIT_LETTERS[digit]) + digit
 }
 
+const KEYPAD_ROWS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['*', '0', '#'],
+]
+
+function keyLabel(digit: string): string {
+  if (digit === '1') return manualMode ? KEY_1_SYMBOLS.slice(0, 4) : '·'
+  if (digit === '0') return manualMode ? 'save' : 'space'
+  if (digit === '*') return 'del'
+  if (digit === '#') return 'next'
+  return DIGIT_LETTERS[digit].toUpperCase()
+}
+
+/** A fixed-size reference grid - always the same 4 lines regardless of
+ * anything typed, so it can sit above the variable-height suggestion/
+ * alternatives area without ever shifting position itself. */
+function renderKeymap(): string {
+  const lastDigit = manualMode ? manualDigit : activeWord().digits.at(-1)
+  return KEYPAD_ROWS.map((row) =>
+    row
+      .map((digit) => {
+        const cell = `${digit} ${keyLabel(digit)}`
+        return (digit === lastDigit ? `[${cell}]` : cell).padEnd(11)
+      })
+      .join(''),
+  ).join('\n')
+}
+
 function candidatesFor(digits: string): TrieEntry[] {
   return digits ? lookup(trie, digits) : []
 }
@@ -267,14 +297,17 @@ function render(): void {
   console.log(`try: ${SAMPLE_HINT}`)
   console.log(manualMode ? '-- MANUAL MODE (spelling a custom word) --' : '')
   console.log()
+  // Fixed-height reference grid, placed before anything that varies in size
+  // (suggestion/alternatives) so it always sits in the same spot.
+  console.log(renderKeymap())
+  console.log()
 
   const prior = priorText()
   console.log(`sentence: ${prior}${prior ? ' ' : ''}${guessLabel()}`)
   console.log()
 
-  if (!manualMode && completion() && candidates().length === 0) {
-    console.log(`suggestion (tab to accept): ${completion()!.word}`)
-  }
+  const suggestion = !manualMode && candidates().length === 0 ? completion() : null
+  console.log(suggestion ? `suggestion (tab to accept): ${suggestion.word}` : '')
   console.log('alternatives:')
   const slots = alternativeSlots()
   for (let i = 0; i < MAX_ALTERNATIVES + 1; i++) {
