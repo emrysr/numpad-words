@@ -1,6 +1,8 @@
 # numpad-words
 Predictive text mapping for 9-key/numeric keypads powered by the SUBTLEX frequency corpus.
 
+https://github.com/emrysr/numpad-words
+
 # demo
 
 vue proof of concept app:
