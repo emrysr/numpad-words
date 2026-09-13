@@ -11,6 +11,7 @@
     "tui": "tsx scripts/tui.ts"
   },
   "dependencies": {
+    "bulma": "^1.0.4",
     "vue": "^3.5.42"
   },
   "devDependencies": {
