@@ -366,10 +366,24 @@ onUnmounted(() => {
 
       <dialog id="tips-dialog" ref="tipsDialog" class="tips-dialog" @click="closeTipsOnBackdropClick">
         <div class="content">
+          <h2 class="title is-5">Numpad Words</h2>
+          <p>
+            A predictive, T9-style text entry demo for numeric keypads - whole words
+            from just the number keys, no full keyboard needed. It's installable as
+            an app (look for your browser's "install"/"add to home screen" option)
+            and keeps working offline afterward.
+          </p>
           <p class="help">Long-press # for manual mode, to add custom words and symbols.</p>
           <p class="help">2-9 to spell · 0 to accept · # to cycle · * to delete</p>
           <p class="help">wrong word? press # to cycle through alternate matches</p>
           <p class="help">long-press a number for its digit · long-press * to clear all</p>
+          <p class="help">
+            Word predictions come from the
+            <a href="https://psychology.nottingham.ac.uk/subtlex-uk/" target="_blank" rel="noopener"
+              >SUBTLEX-UK</a
+            >
+            frequency corpus (van Heuven, Mandera, Keuleers &amp; Brysbaert, 2014).
+          </p>
         </div>
         <form method="dialog">
           <button type="submit" class="button is-small">close</button>

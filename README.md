@@ -14,6 +14,36 @@ match from a static dictionary, candidates are scored against the sentence so fa
 
 **Status:** exploratory. Nothing here is stable yet.
 
+## Feature set
+
+What's actually implemented today, in the Vue app (`npm run dev`):
+
+- **Predictive typing.** `2`-`9` compose a digit sequence; the trie resolves it to
+  ranked dictionary candidates, best one shown immediately.
+- **Cycling.** `#` cycles through same-length candidates. Alternates also show as
+  tags below the sentence and are clickable directly.
+- **Accept.** `0`/space finalizes the current word so the next digit starts a new one.
+- **Delete.** `*` removes the last digit, then the previous word once the current
+  one is empty. Long-press `*` clears the whole input.
+- **Literal digit insert.** Long-press any number key to insert that digit as a
+  character; consecutive long-presses merge into one token (e.g. a phone number).
+- **Manual multi-tap spelling mode.** Long-press `#` to enter classic Nokia-style
+  multi-tap: repeated taps cycle a key's letters (or symbols, on key `1`), auto-committing
+  after a pause. This is the escape hatch for any word the dictionary doesn't have,
+  including ones with digits or symbols in it (e.g. an email address).
+- **Custom word learning.** Words spelled in manual mode are remembered per-device
+  (`localStorage`) and merged into the trie, so they're offered as normal predictive
+  candidates on every future visit.
+- **Completion prediction.** The trie also predicts a likely *full* word before its
+  digits are fully typed (e.g. predicting `something` after just `s`,`o`,`m`), offered
+  as a separate selectable suggestion rather than pre-empting real candidates.
+- **Installable PWA.** Works offline; a manifest, icons, and a service worker
+  precache the trie so first-load-then-offline works out of the box.
+- **In-app tips.** A native `<dialog>`-based help panel keeps usage tips out of the
+  main UI until asked for.
+- **Terminal harness.** `npm run tui` exercises the prediction logic without a
+  browser, for quick manual testing of trie behaviour.
+
 ## Why
 
 The target hardware has space for a numpad-sized key matrix and not much else.
@@ -116,17 +146,19 @@ These are what the proof of concept is for.
 
 ## Keymap
 
-Standard ITU E.161 layout.
+Standard ITU E.161 layout, plus `*`/`#` for delete/cycle.
 
 ```
 1 ·        2 ABC     3 DEF
 4 GHI      5 JKL     6 MNO
 7 PQRS     8 TUV     9 WXYZ
-           0 space
+* del      0 space   # next
 ```
 
-`0` doubles as the escape-hatch key (long-press to cycle candidates), following the
-T9 convention of space-on-zero.
+Every key also does something extra on long-press: a number inserts its own digit
+as a literal character, `*` clears the whole input, and `#` toggles manual
+multi-tap spelling mode (see "Feature set," above) for words the dictionary
+doesn't have.
 
 ## Metrics
 
@@ -139,14 +171,40 @@ Two numbers to beat, established with the trie alone before any ranking is added
 
 ## Roadmap
 
-1. Build script: SUBTLEX → digit-keyed trie → JSON
-2. Runtime lookup: digits in, ranked candidates out
-3. Browser harness with a fixed-size display matching target hardware
+1. ✅ Build script: SUBTLEX → digit-keyed trie → JSON
+2. ✅ Runtime lookup: digits in, ranked candidates out
+3. ✅ Browser harness with a fixed-size display matching target hardware
 4. Baseline KSPC and top-1 accuracy, frequency ranking only
-5. Personal usage store
+5. ✅ Personal usage store — via manual-mode spelling + per-device `localStorage`,
+   rather than the originally-imagined usage-frequency reranking
 6. n-gram reranking, measure the delta
 7. Phrase-level rescoring pass
-8. Decide on the escape hatch from real error rates
+8. Decide on the escape hatch from real error rates — resolved: long-press `#` for
+   manual multi-tap spelling, long-press a number/`*` for literal digits/reset
+
+## Future improvements
+
+Ideas beyond the original roadmap above, roughly in order of how self-contained
+they are:
+
+- **Emit the final text value.** The composed sentence currently only lives inside
+  the Vue component's own display — there's no way for a host page to read or
+  subscribe to it. Add an event (e.g. `@update:text`) or an exposed method so this
+  can be embedded as an actual input control in a larger app, not just a standalone
+  demo.
+- **Publish as an npm package.** The core logic (`src/lib/keymap.ts`, `trie.ts`,
+  `customWords.ts`) is already framework-agnostic; the Vue component is a thin UI
+  layer on top of it. Package the lib functions - and optionally the component - for
+  reuse elsewhere, with a real public API and semver instead of living only inside
+  this app.
+- **Port to Python/MicroPython.** The actual target hardware (see "Why," above) is a
+  microcontroller-class device, not a browser. The trie format is plain JSON and the
+  lookup/ranking logic is simple enough to reimplement directly in MicroPython,
+  letting the same digit-keyed trie run on real numpad hardware with no JS runtime
+  at all.
+- **n-gram/context reranking and phrase-level rescoring.** Still-unimplemented ideas
+  from the original roadmap (items 6-7) — worth revisiting once there's real usage
+  data to show whether frequency-only ranking is actually the bottleneck.
 
 ## Prior art
 

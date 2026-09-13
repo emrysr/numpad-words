@@ -147,3 +147,6 @@ dev-dist/
 
 # Raw corpus data (large, redownloadable via npm run build:trie)
 data/raw/
+
+# Per-device custom words learned by the TUI (mirrors the web app's localStorage)
+data/tui-custom-words.json
