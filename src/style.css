@@ -1,6 +1,10 @@
 :root {
   color-scheme: light dark;
   font: 16px/1.4 system-ui, sans-serif;
+  /* Bulma defaults this to 300px (html { min-width: ... }), which floors the
+     whole page's width regardless of anything else - drop it so the layout
+     can actually shrink below that on narrow screens. */
+  --bulma-body-min-width: 0;
 }
 
 body {

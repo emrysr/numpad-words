@@ -142,5 +142,8 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+# vite-plugin-pwa dev-mode service worker output
+dev-dist/
+
 # Raw corpus data (large, redownloadable via npm run build:trie)
 data/raw/
