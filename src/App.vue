@@ -441,8 +441,10 @@ onUnmounted(() => {
 .container {
   max-width: calc(100vw - 32px);
 }
+
 main {
-    width: clamp(12rem, 50vmin, 30rem);
+  width: 100%;
+  max-width: 30rem;
 }
 
 .tips-dialog {
