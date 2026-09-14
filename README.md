@@ -64,6 +64,10 @@ What's actually implemented today, in the Vue app (`npm run dev`):
   main UI until asked for.
 - **Terminal harness.** `npm run tui` exercises the prediction logic without a
   browser, for quick manual testing of trie behaviour.
+- **Reusable as a component.** Emits `update:modelValue` with the composed text, and
+  the keypad buttons take class props (`buttonClass`/`numberButtonClass`/
+  `symbolButtonClass`) plus a scoped `#button` slot for restyling - see
+  [`docs/01.vue-component.md`](docs/01.vue-component.md).
 
 ## Why
 
@@ -208,11 +212,11 @@ Two numbers to beat, established with the trie alone before any ranking is added
 Ideas beyond the original roadmap above, roughly in order of how self-contained
 they are:
 
-- **Emit the final text value.** The composed sentence currently only lives inside
-  the Vue component's own display — there's no way for a host page to read or
-  subscribe to it. Add an event (e.g. `@update:text`) or an exposed method so this
-  can be embedded as an actual input control in a larger app, not just a standalone
-  demo.
+- ✅ **Emit the final text value.** `update:modelValue` lets a host page read/store
+  the composed sentence via `v-model`, and the keypad buttons take class props plus
+  a scoped slot for restyling. See [`docs/01.vue-component.md`](docs/01.vue-component.md).
+  Still open: the rest of the UI (colors, sentence/candidate-tag markup, tips
+  dialog) is still fixed, Bulma-derived, scoped CSS, not yet exposed the same way.
 - **Publish as an npm package.** The core logic (`src/lib/keymap.ts`, `trie.ts`,
   `customWords.ts`) is already framework-agnostic; the Vue component is a thin UI
   layer on top of it. Package the lib functions - and optionally the component - for

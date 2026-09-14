@@ -1,21 +1,33 @@
 :root {
   color-scheme: light dark;
   font: 16px/1.4 system-ui, sans-serif;
-  /* Bulma defaults this to 300px (html { min-width: ... }), which floors the
-     whole page's width regardless of anything else - drop it so the layout
-     can actually shrink below that on narrow screens. */
   --bulma-body-min-width: 0;
 }
 
-body {
-  margin: 0;
+html, body {
+  height: 100%;
 }
 
-#app {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px 16px;
-  box-sizing: border-box;
+.tips-dialog {
+  max-width: min(24rem, 90vw);
+  border: none;
+  border-radius: var(--bulma-radius-large);
+  padding: 1.25rem 1.5rem;
+}
+
+.tips-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.reset-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.reset-link:hover {
+  text-decoration: underline;
+}
+
+.help {
+  font-size: var(--bulma-help-size);
 }

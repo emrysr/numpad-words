@@ -8,10 +8,80 @@
     <meta name="theme-color" content="#1a1a1a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>numpad-words</title>
+    <title>emrysr/numpad-words</title>
   </head>
-  <body>
-    <div id="app"></div>
+  <body class="is-flex is-flex-direction-column">
+      <header class="hero">
+        <div class="container">
+          <div class="hero-body">
+            <h1 class="title is-4 is-size-5-mobile"><a class="reset-link" href="/">12-Key Predictive Text Input</a></h1>
+            <p class="subtitle is-6">Press a number once for any of its letters - no cycling needed.</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="block is-flex-grow-1">
+        <div id="app" class="container is-max-tablet"></div>
+      </main>
+
+      <footer>
+        <div class="container">
+          <div class="columns">
+            <div class="column is-narrow">
+              <button type="button" class="button is-small is-info" commandfor="tips-dialog" command="show-modal">
+                <span class="icon">ℹ️</span>
+                <span>Tips</span>
+              </button>
+            </div>
+            <div class="column">
+              <div class="message">
+                <p class="message-body">
+                  Try:
+                  <span><strong>good</strong> <kbd class="code">4663</kbd></span>
+                  <span><strong>home</strong> <kbd>4663</kbd></span>
+                  <span><strong>hello</strong> <kbd>43556</kbd></span>
+                </p>
+              </div>
+              <!-- dev-preview only: proves the update:modelValue emit (see
+                   src/main.ts and docs/01.vue-component.md) reaches a plain
+                   hidden form field the way a real host page would consume
+                   it. #preview-text-display just mirrors the hidden input's
+                   value visibly so it's observable here without devtools. -->
+              <input type="hidden" id="preview-text" name="message" />
+              <p class="help">hidden input value: <code id="preview-text-display"></code></p>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+
+      <dialog id="tips-dialog" class="tips-dialog">
+        <div class="content">
+          <h2 class="title is-5">Dialpad Text Input</h2>
+          <h3 class="subtitle is-6">Ambiguous Keypad Text Entry</h3>
+          <p>
+            A predictive, T9-style text entry demo for E.161 numeric keypads - whole words
+            from just the number keys, no full keyboard needed. It's installable as
+            an app (look for your browser's "install"/"add to home screen" option)
+            and keeps working offline afterward.
+          </p>
+          <p class="help">Long-press * for manual mode, to add custom words and symbols.</p>
+          <p class="help">most words work out of the box - manual mode is only needed for a word the dictionary
+            doesn't have (a name, a symbol, anything unusual).</p>
+          <p class="help">2-9 to spell · 0 to accept · * to cycle · # to delete</p>
+          <p class="help">wrong word? press * to cycle through alternate matches</p>
+          <p class="help">long-press a number for its digit · long-press # to clear all</p>
+          <p class="help">
+            Word predictions come from the
+            <a href="https://psychology.nottingham.ac.uk/subtlex-uk/" target="_blank" rel="noopener">SUBTLEX-UK</a>
+            frequency corpus (van Heuven, Mandera, Keuleers &amp; Brysbaert, 2014).
+          </p>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="button is-small">close</button>
+        </form>
+      </dialog>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/tips.ts"></script>
   </body>
 </html>

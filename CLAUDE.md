@@ -12,7 +12,10 @@ word candidates. There are two UIs sharing the same core logic: a Vue browser ap
 
 See `README.md` for the full feature set, the "how it works" pipeline, and design
 rationale (why SUBTLEX, why a plain trie, why n-gram before neural, etc.) — it's
-kept up to date and is the source of truth for product/UX intent.
+kept up to date and is the source of truth for product/UX intent. See
+`docs/01.vue-component.md` for `src/App.vue`'s public surface as a reusable
+component (the `update:modelValue` emit, keypad button class props, and the
+`#button` scoped slot) — keep it in sync with that surface when changing it.
 
 ## Commands
 
@@ -98,7 +101,21 @@ normally need the equivalent change made twice. The shared model:
   left-to-right numpad order you might expect — it was deliberately flipped so
   backspace sits on the right side, matching instinctive phone-keypad muscle
   memory. Don't "fix" this back without checking `README.md`'s keymap section and
-  the tips dialog copy in `src/App.vue`, which document the current mapping.
+  the tips dialog copy in `index.html`, which document the current mapping.
+
+### Page chrome lives outside the Vue component
+
+`src/App.vue`'s template is just the widget (screen + keypad, root a plain `<div>`)
+— the header, tips `<dialog>`, and footer are static markup in `index.html`, with
+`src/tips.ts` (plain DOM, no Vue) wiring the dialog's open/close behavior. This
+split is deliberate (see `docs/01.vue-component.md`): a reusable component
+shouldn't render page-level landmarks like `<main>` or dictate a host's header/
+footer. Layout CSS is split the same way — `.container`/`.tips-dialog`/`.reset-link`/
+`.help` live in `src/style.css` (global) since they style elements outside the
+component now; `.device` and everything under it stays in `src/App.vue`'s
+`<style scoped>`. Note: this repo is checked out on a `/mnt/c/...` DrvFS mount in
+WSL — Vite's dev-server file watcher can silently miss edits there, so if a change
+doesn't show up, restart `npm run dev` before assuming the code is wrong.
 
 ### PWA / offline (`vite.config.ts`)
 

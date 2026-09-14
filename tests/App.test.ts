@@ -18,9 +18,9 @@ function mockTrieFetch(entries = DEFAULT_ENTRIES) {
   )
 }
 
-async function mountApp(entries?: typeof DEFAULT_ENTRIES) {
+async function mountApp(entries?: typeof DEFAULT_ENTRIES, mountOptions: Record<string, unknown> = {}) {
   mockTrieFetch(entries)
-  const wrapper = mount(App, { attachTo: document.body })
+  const wrapper = mount(App, { attachTo: document.body, ...mountOptions })
   await flushPromises()
   return wrapper
 }
@@ -93,6 +93,29 @@ describe('typing and prediction', () => {
     for (const digit of ['4', '6', '6', '3']) await tapDigit(wrapper, digit)
     await tapDigit(wrapper, '*')
     expect(sentenceText(wrapper)).toBe('good')
+  })
+
+  it("labels '*' as 'spell' until there's actually something to cycle to", async () => {
+    const wrapper = await mountApp()
+    // nothing typed yet - a short press wouldn't go anywhere
+    expect(keyByDigit(wrapper, '*').get('.letters').text()).toBe('spell')
+
+    // "home"/"good" collide at 4663 - more than one candidate to cycle through
+    for (const digit of ['4', '6', '6', '3']) await tapDigit(wrapper, digit)
+    expect(keyByDigit(wrapper, '*').get('.letters').text()).toBe('next')
+
+    // "hello" is the sole candidate at its digit length - nothing to cycle to again
+    await tapDigit(wrapper, '0')
+    for (const digit of ['4', '3', '5', '5', '6']) await tapDigit(wrapper, digit)
+    expect(keyByDigit(wrapper, '*').get('.letters').text()).toBe('spell')
+  })
+
+  it("labels '*' as 'next' when there's a predicted completion to accept, even with no exact candidates", async () => {
+    const wrapper = await mountApp()
+    // "s","o","m" - a valid prefix of "something" with no exact-length match,
+    // but there is a completion to accept
+    for (const digit of ['7', '6', '6']) await tapDigit(wrapper, digit)
+    expect(keyByDigit(wrapper, '*').get('.letters').text()).toBe('next')
   })
 
   it('selects an alternative by clicking its tag, without finalizing the word', async () => {
@@ -203,11 +226,27 @@ describe('manual mode', () => {
     await holdDigit(wrapper, '*', 500)
   }
 
-  it('long-press # enters manual mode, shown by the badge', async () => {
+  it('long-press * enters manual mode, shown by the badge', async () => {
     const wrapper = await mountApp()
     expect(wrapper.find('.tag.is-warning').exists()).toBe(false)
     await enterManualMode(wrapper)
     expect(wrapper.find('.tag.is-warning').exists()).toBe(true)
+  })
+
+  it("shows the badge in the same reserved tags row as alternatives/completion, not a separate row", async () => {
+    const wrapper = await mountApp()
+    // no dedicated row for it anymore - only the one shared tags row exists
+    expect(wrapper.findAll('.tags')).toHaveLength(1)
+    await enterManualMode(wrapper)
+    const badge = wrapper.get('.tag.is-warning')
+    expect(badge.element.parentElement).toBe(wrapper.get('.tags').element)
+  })
+
+  it("labels '*' as 'esc' while in manual mode, instead of 'spell'", async () => {
+    const wrapper = await mountApp()
+    expect(keyByDigit(wrapper, '*').get('.letters').text()).toBe('spell')
+    await enterManualMode(wrapper)
+    expect(keyByDigit(wrapper, '*').get('.letters').text()).toBe('esc')
   })
 
   it('multi-tap cycles a key\'s letters and auto-commits after a pause', async () => {
@@ -278,6 +317,87 @@ describe('physical keyboard input', () => {
   })
 })
 
+describe('keypad customization', () => {
+  it("defaults every key to today's Bulma look", async () => {
+    const wrapper = await mountApp()
+    expect(keyByDigit(wrapper, '5').classes()).toEqual(
+      expect.arrayContaining(['key', 'button', 'is-rounded', 'is-flex-direction-column']),
+    )
+    // '*'/'#' get the same default look as 0-9 when no symbolButtonClass is given
+    expect(keyByDigit(wrapper, '*').classes()).toEqual(
+      expect.arrayContaining(['key', 'button', 'is-rounded', 'is-flex-direction-column']),
+    )
+  })
+
+  it('layers numberButtonClass onto 0-9 and symbolButtonClass onto * and # (not a replacement)', async () => {
+    const wrapper = await mountApp(undefined, {
+      props: { numberButtonClass: 'my-number', symbolButtonClass: 'my-symbol' },
+    })
+    const numberClasses = keyByDigit(wrapper, '5').classes()
+    // the category-specific class is added...
+    expect(numberClasses).toContain('my-number')
+    expect(numberClasses).not.toContain('my-symbol')
+    // ...alongside buttonClass's default, not instead of it
+    expect(numberClasses).toEqual(expect.arrayContaining(['button', 'is-rounded', 'is-flex-direction-column']))
+
+    const symbolClasses = keyByDigit(wrapper, '*').classes()
+    expect(symbolClasses).toContain('my-symbol')
+    expect(symbolClasses).not.toContain('my-number')
+    expect(symbolClasses).toEqual(expect.arrayContaining(['button', 'is-rounded', 'is-flex-direction-column']))
+    expect(keyByDigit(wrapper, '#').classes()).toContain('my-symbol')
+  })
+
+  it('applies buttonClass to every key as the generic base', async () => {
+    const wrapper = await mountApp(undefined, { props: { buttonClass: 'my-generic' } })
+    expect(keyByDigit(wrapper, '5').classes()).toContain('my-generic')
+    expect(keyByDigit(wrapper, '*').classes()).toContain('my-generic')
+    expect(keyByDigit(wrapper, '#').classes()).toContain('my-generic')
+  })
+
+  it('layers numberButtonClass on top of a custom buttonClass, independent of symbolButtonClass', async () => {
+    const wrapper = await mountApp(undefined, {
+      props: { buttonClass: 'my-generic', numberButtonClass: 'my-number' },
+    })
+    // number keys get both, layered together...
+    const numberClasses = keyByDigit(wrapper, '5').classes()
+    expect(numberClasses).toContain('my-number')
+    expect(numberClasses).toContain('my-generic')
+    // ...but a category left unset just gets the generic buttonClass, not the
+    // sibling category's class
+    const symbolClasses = keyByDigit(wrapper, '*').classes()
+    expect(symbolClasses).toContain('my-generic')
+    expect(symbolClasses).not.toContain('my-number')
+  })
+
+  it('lets a consumer replace button content via the #button slot while keeping it interactive', async () => {
+    const wrapper = await mountApp(undefined, {
+      slots: {
+        button: '<div class="custom-key">{{ params.digit }}:{{ params.label }}:{{ params.isSymbol }}</div>',
+      },
+    })
+    // the default '.digit'/'.letters' content is gone (not just hidden), so
+    // buttons have to be found by keypad position instead of keyByDigit here
+    const KEY_ORDER = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']
+    const buttons = wrapper.findAll('button.key')
+    const key5 = buttons[KEY_ORDER.indexOf('5')]
+    expect(key5.find('.custom-key').text()).toBe('5:JKL:false')
+    expect(key5.find('.letters').exists()).toBe(false)
+
+    const keyStar = buttons[KEY_ORDER.indexOf('*')]
+    // no candidates typed yet, so '*' has nothing to cycle to
+    expect(keyStar.find('.custom-key').text()).toBe('*:spell:true')
+
+    // the real <button> (and its pointer handlers) stay owned by the component -
+    // custom content doesn't have to wire up interactivity itself
+    for (const digit of ['4', '6', '6', '3']) {
+      const btn = buttons[KEY_ORDER.indexOf(digit)]
+      await btn.trigger('pointerdown')
+      await btn.trigger('pointerup')
+    }
+    expect(sentenceText(wrapper)).toBe('home') // higher freq than "good" for the same digits
+  })
+})
+
 describe('modelValue emit', () => {
   it('emits the empty string immediately on mount', async () => {
     const wrapper = await mountApp()
@@ -294,19 +414,5 @@ describe('modelValue emit', () => {
     for (const digit of ['4', '6', '6', '3']) await tapDigit(wrapper, digit)
     const finalEmitted = wrapper.emitted('update:modelValue') as string[][]
     expect(finalEmitted.at(-1)).toEqual(['home home'])
-  })
-})
-
-describe('tips dialog', () => {
-  it('opens via the tips button and closes via the close button', async () => {
-    const wrapper = await mountApp()
-    const dialog = wrapper.get('dialog').element as HTMLDialogElement
-    expect(dialog.open).toBe(false)
-
-    await wrapper.get('button[command="show-modal"]').trigger('click')
-    expect(dialog.open).toBe(true)
-
-    await wrapper.get('dialog form button').trigger('click')
-    expect(dialog.open).toBe(false)
   })
 })

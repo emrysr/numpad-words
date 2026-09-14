@@ -93,10 +93,20 @@ const KEYPAD_ROWS = [
   ['*', '0', '#'],
 ]
 
+/** '*' only has something to cycle to (or a completion to accept) once there's
+ * more than one candidate - until then, short-pressing it does nothing visible,
+ * so its label hints at the other thing it does (long-press: manual mode)
+ * instead of a "next" that wouldn't go anywhere yet. */
+function hasNextChoice(): boolean {
+  return candidates().length > 1 || completion() !== null
+}
+
 function keyLabel(digit: string): string {
   if (digit === '1') return KEY_1_SYMBOLS.slice(0, 4)
   if (digit === '0') return manualMode ? 'save' : 'space'
-  if (digit === '*') return 'next'
+  // long-press still toggles manual mode either way - the label just flips to
+  // hint at exiting it once already inside, rather than entering it again
+  if (digit === '*') return manualMode ? 'esc' : hasNextChoice() ? 'next' : 'spell'
   if (digit === '#') return 'del'
   return DIGIT_LETTERS[digit].toUpperCase()
 }
