@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed, watch } from 'vue'
 import { DIGIT_LETTERS, KEY_1_SYMBOLS, isMappable, wordToDigits } from './lib/keymap'
 import { bestCompletion, insertWord, lookup, type TrieEntry, type TrieNode } from './lib/trie'
 import { loadCustomWords, saveCustomWord } from './lib/customWords'
+
+const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const MAX_ALTERNATIVES = 4
 const LONG_PRESS_MS = 450
@@ -44,10 +46,10 @@ function manualCharsFor(digit: string): string {
 }
 
 function keyLabel(digit: string): string {
-  if (digit === '1') return manualMode.value ? KEY_1_SYMBOLS.slice(0, 4) : '·'
+  if (digit === '1') return KEY_1_SYMBOLS.slice(0, 4)
   if (digit === '0') return manualMode.value ? 'save' : 'space'
-  if (digit === '*') return 'del'
-  if (digit === '#') return 'next'
+  if (digit === '*') return 'next'
+  if (digit === '#') return 'del'
   return DIGIT_LETTERS[digit].toUpperCase()
 }
 
@@ -106,15 +108,23 @@ const completion = computed<TrieEntry | null>(() => {
 const manualPendingLetter = computed(() =>
   manualDigit.value ? manualCharsFor(manualDigit.value)[manualIndex.value] : '',
 )
+const key1PendingSymbol = computed(() =>
+  key1Index.value !== null ? KEY_1_SYMBOLS[key1Index.value] : '',
+)
 const guessLabel = computed(() => {
   if (manualMode.value) return manualWord.value + manualPendingLetter.value
-  return guess.value?.word ?? activeWord.value.digits
+  return (guess.value?.word ?? activeWord.value.digits) + key1PendingSymbol.value
 })
+const fullText = computed(() => `${priorText.value}${priorText.value ? ' ' : ''}${guessLabel.value}`)
 /** Always the same top candidates in the same order/positions, regardless of
  * which one is currently active - cycling only toggles which slot is hidden,
- * so the row never reflows or reshuffles as you cycle through choices. */
+ * so the row never reflows or reshuffles as you cycle through choices. A
+ * single candidate is just the guess already shown in the sentence, so
+ * there's nothing to pick between and the row stays empty. */
 const alternatives = computed(() =>
-  candidates.value.slice(0, MAX_ALTERNATIVES + 1).map((entry, index) => ({ entry, index })),
+  candidates.value.length > 1
+    ? candidates.value.slice(0, MAX_ALTERNATIVES + 1).map((entry, index) => ({ entry, index }))
+    : [],
 )
 
 function selectCandidate(index: number): void {
@@ -164,7 +174,29 @@ function saveManualWord(): void {
   manualMode.value = false
 }
 
+/** Key '1' has no letters on a real keypad, so - independent of manual mode -
+ * it always multi-taps through its own punctuation symbols, auto-committing
+ * the pending one as a literal character after a pause or when another key
+ * is pressed. Otherwise its digit would fall through to pressDigit() and sit
+ * there unresolvable, since no dictionary word maps through digit 1. */
+const key1Index = ref<number | null>(null)
+let key1CommitTimer: ReturnType<typeof setTimeout> | undefined
+
+function commitKey1Symbol(): void {
+  clearTimeout(key1CommitTimer)
+  if (key1Index.value === null) return
+  insertLiteralChar(KEY_1_SYMBOLS[key1Index.value])
+  key1Index.value = null
+}
+
+function cycleKey1Symbol(): void {
+  key1Index.value = key1Index.value === null ? 0 : (key1Index.value + 1) % KEY_1_SYMBOLS.length
+  clearTimeout(key1CommitTimer)
+  key1CommitTimer = setTimeout(commitKey1Symbol, MULTI_TAP_TIMEOUT_MS)
+}
+
 function toggleManualMode(): void {
+  commitKey1Symbol()
   commitManualLetter()
   if (!manualMode.value && activeWord.value.digits) {
     // entering manual mode: settle whatever T9 word was mid-composition so it isn't orphaned
@@ -177,6 +209,7 @@ function toggleManualMode(): void {
 }
 
 function pressDigit(digit: string): void {
+  commitKey1Symbol()
   if (!digit) return
   const last = activeWord.value
   if (last.literal || (!wordInProgress && last.digits)) {
@@ -189,6 +222,7 @@ function pressDigit(digit: string): void {
 }
 
 function cycleNext(): void {
+  commitKey1Symbol()
   activeWord.value.cycleIndex++
 }
 
@@ -217,6 +251,7 @@ function nextOrAcceptCompletion(): void {
 }
 
 function accept(): void {
+  commitKey1Symbol()
   wordInProgress = false
 }
 
@@ -232,6 +267,12 @@ function backspace(): void {
       manualWord.value = manualWord.value.slice(0, -1)
       return
     }
+  }
+
+  if (key1Index.value !== null) {
+    clearTimeout(key1CommitTimer)
+    key1Index.value = null
+    return
   }
 
   const last = activeWord.value
@@ -252,16 +293,22 @@ function clearAll(): void {
   manualWord.value = ''
   manualDigit.value = null
   manualIndex.value = 0
+  clearTimeout(key1CommitTimer)
+  key1Index.value = null
+}
+
+function insertLiteralChar(char: string): void {
+  const last = activeWord.value
+  if (last.literal) {
+    last.digits += char
+  } else {
+    words.value.push({ digits: char, cycleIndex: 0, literal: true })
+  }
+  wordInProgress = false
 }
 
 function insertLiteralDigit(digit: string): void {
-  const last = activeWord.value
-  if (last.literal) {
-    last.digits += digit
-  } else {
-    words.value.push({ digits: digit, cycleIndex: 0, literal: true })
-  }
-  wordInProgress = false
+  insertLiteralChar(digit)
 }
 
 function createLongPress(onLongPress: () => void, onShortPress: () => void) {
@@ -287,6 +334,7 @@ function createLongPress(onLongPress: () => void, onShortPress: () => void) {
 
 const DIGIT_SHORT_PRESS: Record<string, () => void> = {
   '0': () => (manualMode.value ? saveManualWord() : accept()),
+  '1': () => (manualMode.value ? cycleManualLetter('1') : cycleKey1Symbol()),
 }
 
 const digitPresses = new Map(
@@ -300,20 +348,32 @@ const digitPresses = new Map(
 )
 
 const deletePress = createLongPress(clearAll, backspace)
-const hashPress = createLongPress(toggleManualMode, nextOrAcceptCompletion)
+const nextPress = createLongPress(toggleManualMode, nextOrAcceptCompletion)
 
 function keyPress(digit: string) {
-  if (digit === '*') return deletePress
-  if (digit === '#') return hashPress
+  if (digit === '#') return deletePress
+  if (digit === '*') return nextPress
   return digitPresses.get(digit)
 }
 
+/** A physical numpad's digit keys report a NumLock-dependent event.key
+ * ('End', 'Insert', arrow names, etc. when NumLock is off) but a stable
+ * event.code ('Numpad0'..'Numpad9') regardless of NumLock state - fall back
+ * to that so the app (built for physical numpad hardware) works whether or
+ * not NumLock happens to be on. */
+function digitFromEvent(event: KeyboardEvent): string | null {
+  const numpadMatch = /^Numpad([0-9])$/.exec(event.code)
+  if (numpadMatch) return numpadMatch[1]
+  return event.key >= '0' && event.key <= '9' ? event.key : null
+}
+
 function handleKeydown(event: KeyboardEvent): void {
-  if (event.key >= '2' && event.key <= '9') {
-    manualMode.value ? cycleManualLetter(event.key) : pressDigit(event.key)
-  } else if (event.key === '1') {
-    manualMode.value ? cycleManualLetter('1') : pressDigit('1')
-  } else if (event.key === '0') {
+  const digit = digitFromEvent(event)
+  if (digit !== null && digit >= '2' && digit <= '9') {
+    manualMode.value ? cycleManualLetter(digit) : pressDigit(digit)
+  } else if (digit === '1') {
+    manualMode.value ? cycleManualLetter('1') : cycleKey1Symbol()
+  } else if (digit === '0') {
     manualMode.value ? saveManualWord() : accept()
   } else if (event.key === ' ') {
     event.preventDefault()
@@ -321,14 +381,21 @@ function handleKeydown(event: KeyboardEvent): void {
   } else if (event.key === 'Backspace') {
     backspace()
   } else if (event.key === '*') {
-    backspace()
-  } else if (event.key === '#') {
     nextOrAcceptCompletion()
+  } else if (event.key === '#') {
+    backspace()
   } else if (event.key === 'Tab') {
     event.preventDefault()
     cycleNext()
   }
 }
+
+/** Lets a host page read/store the composed text (e.g. into a hidden form
+ * field) without reaching into the component's internals - fires on every
+ * change, including the initial empty value. Placed after every ref/computed
+ * fullText depends on is declared, since {immediate: true} evaluates it
+ * synchronously right here. */
+watch(fullText, (value) => emit('update:modelValue', value), { immediate: true })
 
 onMounted(async () => {
   const response = await fetch(`${import.meta.env.BASE_URL}trie.json`)
@@ -345,93 +412,84 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   deletePress.cancel()
-  hashPress.cancel()
+  nextPress.cancel()
   clearTimeout(manualCommitTimer)
+  clearTimeout(key1CommitTimer)
   for (const press of digitPresses.values()) press.cancel()
 })
 </script>
 
 <template>
-    <div class="container">
-      <header class="block">
-        <h1 class="title is-4"><a class="reset-link" :href="baseUrl">Quick-type on a numpad</a></h1>
-        <p class="subtitle is-6">Press a number once for any of its letters - no cycling needed.</p>
-        <p class="help">try: {{ sampleHint }}</p>
-      </header>
+  <div class="container">
+    <header class="block">
+      <h1 class="title is-4"><a class="reset-link" :href="baseUrl">12-Key Predictive Text Input</a></h1>
+      <p class="subtitle is-6">Press a number once for any of its letters - no cycling needed.</p>
+      <p class="help">try: {{ sampleHint }}</p>
+    </header>
 
-      <dialog id="tips-dialog" ref="tipsDialog" class="tips-dialog" @click="closeTipsOnBackdropClick">
-        <div class="content">
-          <h2 class="title is-5">Numpad Words</h2>
-          <p>
-            A predictive, T9-style text entry demo for numeric keypads - whole words
-            from just the number keys, no full keyboard needed. It's installable as
-            an app (look for your browser's "install"/"add to home screen" option)
-            and keeps working offline afterward.
-          </p>
-          <p class="help">Long-press # for manual mode, to add custom words and symbols.</p>
-          <p class="help">2-9 to spell · 0 to accept · # to cycle · * to delete</p>
-          <p class="help">wrong word? press # to cycle through alternate matches</p>
-          <p class="help">long-press a number for its digit · long-press * to clear all</p>
-          <p class="help">
-            Word predictions come from the
-            <a href="https://psychology.nottingham.ac.uk/subtlex-uk/" target="_blank" rel="noopener"
-              >SUBTLEX-UK</a
-            >
-            frequency corpus (van Heuven, Mandera, Keuleers &amp; Brysbaert, 2014).
-          </p>
+    <dialog id="tips-dialog" ref="tipsDialog" class="tips-dialog" @click="closeTipsOnBackdropClick">
+      <div class="content">
+        <h2 class="title is-5">Dialpad Text Input</h2>
+        <h3 class="subtitle is-6">Ambiguous Keypad Text Entry</h3>
+        <p>
+          A predictive, T9-style text entry demo for E.161 numeric keypads - whole words
+          from just the number keys, no full keyboard needed. It's installable as
+          an app (look for your browser's "install"/"add to home screen" option)
+          and keeps working offline afterward.
+        </p>
+        <p class="help">Long-press * for manual mode, to add custom words and symbols.</p>
+        <p class="help">most words work out of the box - manual mode is only needed for a word the dictionary doesn't
+          have (a name, a symbol, anything unusual).</p>
+        <p class="help">2-9 to spell · 0 to accept · * to cycle · # to delete</p>
+        <p class="help">wrong word? press * to cycle through alternate matches</p>
+        <p class="help">long-press a number for its digit · long-press # to clear all</p>
+        <p class="help">
+          Word predictions come from the
+          <a href="https://psychology.nottingham.ac.uk/subtlex-uk/" target="_blank" rel="noopener">SUBTLEX-UK</a>
+          frequency corpus (van Heuven, Mandera, Keuleers &amp; Brysbaert, 2014).
+        </p>
+      </div>
+      <form method="dialog">
+        <button type="submit" class="button is-small">close</button>
+      </form>
+    </dialog>
+
+    <main data-label="device" class="box device">
+      <div class="screen notification is-dark has-text-success p-1 is-clipped is-flex is-flex-direction-column">
+        <div class="tags mb-0">
+          <span v-if="manualMode" class="tag is-warning">manual mode</span>
         </div>
-        <form method="dialog">
-          <button type="submit" class="button is-small">close</button>
-        </form>
-      </dialog>
-
-      <main data-label="device" class="box device">
-        <div class="screen notification is-dark has-text-success p-1 is-clipped is-flex is-flex-direction-column">
-          <div class="tags mb-0">
-            <span v-if="manualMode" class="tag is-warning">manual mode</span>
-          </div>
-          <div class="sentence is-family-monospace is-flex-grow-1">{{ priorText }}{{ priorText ? ' ' : '' }}{{ guessLabel }}<span class="cursor">|</span></div>
-          <div class="tags mt-2">
-            <span v-if="completion" class="tag" @click="acceptCompletion">{{ completion.word }}</span>
-            <span
-              v-for="{ entry, index } in alternatives"
-              :key="entry.word"
-              class="tag"
-              :class="{ 'is-invisible': index === selectedIndex }"
-              @click="selectCandidate(index)"
-            >{{ entry.word }}</span>
-          </div>
+        <div class="sentence is-family-monospace is-flex-grow-1">{{ fullText }}<span class="cursor">|</span></div>
+        <div class="tags mt-2">
+          <span v-if="completion" class="tag" @click="acceptCompletion">{{ completion.word }}</span>
+          <span v-for="{ entry, index } in alternatives" :key="entry.word" class="tag"
+            :class="{ 'is-current': index === selectedIndex }" @click="selectCandidate(index)">{{ entry.word }}</span>
         </div>
+      </div>
 
-        <div class="fixed-grid has-3-cols">
-          <div class="grid is-gap-1">
-            <template v-for="(row, rowIndex) in KEYPAD_ROWS" :key="rowIndex">
-              <button
-                v-for="(digit, colIndex) in row"
-                :key="`${rowIndex}-${colIndex}`"
-                class="button key is-rounded is-flex-direction-column"
-                @pointerdown="keyPress(digit)?.down()"
-                @pointerup="keyPress(digit)?.up()"
-                @pointerleave="keyPress(digit)?.cancel()"
-              >
-                <span class="letters has-text-weight-bold">{{ keyLabel(digit) }}</span>
-                <span class="digit has-text-grey">{{ digit }}</span>
-              </button>
-            </template>
-          </div>
+      <div class="fixed-grid has-3-cols">
+        <div class="grid is-gap-1">
+          <template v-for="(row, rowIndex) in KEYPAD_ROWS" :key="rowIndex">
+            <button v-for="(digit, colIndex) in row" :key="`${rowIndex}-${colIndex}`"
+              class="button key is-rounded is-flex-direction-column" @pointerdown="keyPress(digit)?.down()"
+              @pointerup="keyPress(digit)?.up()" @pointerleave="keyPress(digit)?.cancel()">
+              <span class="letters has-text-weight-bold">{{ keyLabel(digit) }}</span>
+              <span class="digit has-text-grey">{{ digit }}</span>
+            </button>
+          </template>
         </div>
-      </main>
+      </div>
+    </main>
 
-      <footer>
-        <button type="button" class="button is-small" commandfor="tips-dialog" command="show-modal" @click="openTips">
-            tips
-          </button>
-      </footer>
-    </div>
+    <footer>
+      <button type="button" class="button is-small" commandfor="tips-dialog" command="show-modal" @click="openTips">
+        tips
+      </button>
+    </footer>
+  </div>
 </template>
 
 <style scoped>
-
 /* #app centers its content (align-items: center in style.css) instead of
    stretching it, and has no explicit width itself - so when its content
    wants to be wider than the viewport, #app (and the page) grow to fit it
@@ -459,16 +517,16 @@ main {
 }
 
 .device {
-    min-width: fit-content;
-    container-type: inline-size;
-    container-name: device;
-    /* Text scales with the device box's own width via cqi, with only a
+  min-width: fit-content;
+  container-type: inline-size;
+  container-name: device;
+  /* Text scales with the device box's own width via cqi, with only a
        readability floor - no fixed upper rem cap. The box's own max-width
        above is what naturally stops growth (and therefore font growth) on
        large screens; a second, independent ceiling here would just drift
        out of sync with it, which is exactly what happened before. */
-    --font-lg: clamp(0.75rem, 5.2cqi, 4rem);
-    --font-sm: clamp(0.6rem, 3.9cqi, 3rem);
+  --font-lg: clamp(0.75rem, 5.2cqi, 4rem);
+  --font-sm: clamp(0.6rem, 3.9cqi, 3rem);
 }
 
 
@@ -484,7 +542,7 @@ main {
 /* Fixed dimensions stand in for the target hardware's display, per the
    README's open question of whether there's room for a candidate list. */
 .screen {
-  aspect-ratio:3;
+  aspect-ratio: 3;
   width: 100%;
   box-sizing: border-box;
   /* Bulma sizes .notification's own padding in em, relative to this element's
@@ -493,7 +551,8 @@ main {
 }
 
 .sentence {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
   font-size: var(--font-lg);
 }
 
@@ -501,7 +560,7 @@ main {
    button's own min-content width - that floor was propagating out through
    .device's min-width: fit-content and overflowing the page on narrow
    viewports. minmax(0, 1fr) lets columns shrink the rest of the way. */
-.fixed-grid > .grid {
+.fixed-grid>.grid {
   grid-template-columns: repeat(var(--bulma-grid-column-count), minmax(0, 1fr));
 }
 
@@ -517,15 +576,20 @@ main {
 }
 
 .letters {
-  font-size: var(--font-lg);
+  font-size: var(--font-sm);
 }
 
 .digit {
-  font-size: var(--font-sm);
+  font-size: var(--font-lg);
 }
 
 .tags .tag {
   font-size: var(--font-sm);
+}
+
+.tag.is-current {
+  outline: 1px solid currentColor;
+  font-weight: bold;
 }
 
 /* Alternatives/completion tags are clickable; the manual-mode badge isn't. */
@@ -536,5 +600,4 @@ main {
 .help {
   font-size: var(--bulma-help-size);
 }
-
 </style>

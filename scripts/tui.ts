@@ -74,6 +74,14 @@ let manualDigit: string | null = null
 let manualIndex = 0
 let manualCommitTimer: ReturnType<typeof setTimeout> | undefined
 
+/** Key '1' has no letters on a real keypad, so - independent of manual mode -
+ * it always multi-taps through its own punctuation symbols, auto-committing
+ * the pending one as a literal character after a pause or when another key
+ * is pressed. Otherwise its digit would fall through to pressDigit() and sit
+ * there unresolvable, since no dictionary word maps through digit 1. */
+let key1Index: number | null = null
+let key1CommitTimer: ReturnType<typeof setTimeout> | undefined
+
 function manualCharsFor(digit: string): string {
   return (digit === '1' ? KEY_1_SYMBOLS : DIGIT_LETTERS[digit]) + digit
 }
@@ -86,10 +94,10 @@ const KEYPAD_ROWS = [
 ]
 
 function keyLabel(digit: string): string {
-  if (digit === '1') return manualMode ? KEY_1_SYMBOLS.slice(0, 4) : '·'
+  if (digit === '1') return KEY_1_SYMBOLS.slice(0, 4)
   if (digit === '0') return manualMode ? 'save' : 'space'
-  if (digit === '*') return 'del'
-  if (digit === '#') return 'next'
+  if (digit === '*') return 'next'
+  if (digit === '#') return 'del'
   return DIGIT_LETTERS[digit].toUpperCase()
 }
 
@@ -152,13 +160,17 @@ function guessLabel(): string {
   const list = candidates()
   const index = selectedIndexFor(list, activeWord().cycleIndex)
   const guess = index >= 0 ? list[index] : null
-  return guess?.word ?? completion()?.word ?? activeWord().digits
+  const pendingKey1 = key1Index !== null ? KEY_1_SYMBOLS[key1Index] : ''
+  return (guess?.word ?? completion()?.word ?? activeWord().digits) + pendingKey1
 }
 
 /** Fixed top-(N+1) candidates in stable order; the active one is marked
  * rather than excluded, so the list never reflows/jumps while cycling. */
+/** A single candidate is just the guess already shown in the sentence, so
+ * there's nothing to pick between and the list stays empty. */
 function alternativeSlots(): { word: string; active: boolean }[] {
   const list = candidates()
+  if (list.length <= 1) return []
   const selected = selectedIndexFor(list, activeWord().cycleIndex)
   return list.slice(0, MAX_ALTERNATIVES + 1).map((entry, index) => ({
     word: entry.word,
@@ -167,6 +179,7 @@ function alternativeSlots(): { word: string; active: boolean }[] {
 }
 
 function pressDigit(digit: string): void {
+  commitKey1Symbol()
   const last = activeWord()
   if (last.literal || (!wordInProgress && last.digits)) {
     words.push({ digits: digit, cycleIndex: 0 })
@@ -178,6 +191,7 @@ function pressDigit(digit: string): void {
 }
 
 function cycleNext(): void {
+  commitKey1Symbol()
   activeWord().cycleIndex++
 }
 
@@ -203,6 +217,7 @@ function nextOrAcceptCompletion(): void {
 }
 
 function accept(): void {
+  commitKey1Symbol()
   wordInProgress = false
 }
 
@@ -218,6 +233,12 @@ function backspace(): void {
       manualWord = manualWord.slice(0, -1)
       return
     }
+  }
+
+  if (key1Index !== null) {
+    clearTimeout(key1CommitTimer)
+    key1Index = null
+    return
   }
 
   const last = activeWord()
@@ -238,6 +259,33 @@ function resetAll(): void {
   manualWord = ''
   manualDigit = null
   manualIndex = 0
+  clearTimeout(key1CommitTimer)
+  key1Index = null
+}
+
+function commitKey1Symbol(): void {
+  clearTimeout(key1CommitTimer)
+  if (key1Index === null) return
+  const char = KEY_1_SYMBOLS[key1Index]
+  const last = activeWord()
+  if (last.literal) {
+    last.digits += char
+  } else {
+    words.push({ digits: char, cycleIndex: 0, literal: true })
+  }
+  wordInProgress = false
+  key1Index = null
+}
+
+function cycleKey1Symbol(): void {
+  key1Index = key1Index === null ? 0 : (key1Index + 1) % KEY_1_SYMBOLS.length
+  clearTimeout(key1CommitTimer)
+  // Unlike the Vue app, nothing re-renders this automatically when the timer
+  // fires on its own (not in response to a keypress), so trigger it here.
+  key1CommitTimer = setTimeout(() => {
+    commitKey1Symbol()
+    render()
+  }, MULTI_TAP_TIMEOUT_MS)
 }
 
 function commitManualLetter(): void {
@@ -281,6 +329,7 @@ function saveManualWord(): void {
 }
 
 function toggleManualMode(): void {
+  commitKey1Symbol()
   commitManualLetter()
   if (!manualMode && activeWord().digits) {
     words.push({ digits: '', cycleIndex: 0 })
@@ -312,7 +361,7 @@ function render(): void {
   const slots = alternativeSlots()
   for (let i = 0; i < MAX_ALTERNATIVES + 1; i++) {
     const slot = slots[i]
-    console.log(slot ? (slot.active ? '' : `  ${slot.word}`) : '')
+    console.log(slot ? (slot.active ? `> ${slot.word}` : `  ${slot.word}`) : '')
   }
 
   console.log()
@@ -346,7 +395,7 @@ function main(): void {
     } else if (str >= '2' && str <= '9') {
       manualMode ? cycleManualLetter(str) : pressDigit(str)
     } else if (str === '1') {
-      if (manualMode) cycleManualLetter('1')
+      manualMode ? cycleManualLetter('1') : cycleKey1Symbol()
     } else if (str === '0' || key.name === 'space') {
       manualMode ? saveManualWord() : accept()
     }

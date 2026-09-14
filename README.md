@@ -38,14 +38,17 @@ What's actually implemented today, in the Vue app (`npm run dev`):
 
 - **Predictive typing.** `2`-`9` compose a digit sequence; the trie resolves it to
   ranked dictionary candidates, best one shown immediately.
-- **Cycling.** `#` cycles through same-length candidates. Alternates also show as
+- **Cycling.** `*` cycles through same-length candidates. Alternates also show as
   tags below the sentence and are clickable directly.
 - **Accept.** `0`/space finalizes the current word so the next digit starts a new one.
-- **Delete.** `*` removes the last digit, then the previous word once the current
-  one is empty. Long-press `*` clears the whole input.
+- **Delete.** `#` removes the last digit, then the previous word once the current
+  one is empty. Long-press `#` clears the whole input.
 - **Literal digit insert.** Long-press any number key to insert that digit as a
   character; consecutive long-presses merge into one token (e.g. a phone number).
-- **Manual multi-tap spelling mode.** Long-press `#` to enter classic Nokia-style
+- **Key `1` punctuation.** Always-available multi-tap through `.,?!'-/@&`, even
+  outside manual mode: repeated taps cycle the symbol, auto-committing after a
+  pause or when another key is pressed.
+- **Manual multi-tap spelling mode.** Long-press `*` to enter classic Nokia-style
   multi-tap: repeated taps cycle a key's letters (or symbols, on key `1`), auto-committing
   after a pause. This is the escape hatch for any word the dictionary doesn't have,
   including ones with digits or symbols in it (e.g. an email address).
@@ -164,17 +167,17 @@ These are what the proof of concept is for.
 
 ## Keymap
 
-Standard ITU E.161 layout, plus `*`/`#` for delete/cycle.
+Standard ITU E.161 layout, plus `*`/`#` for cycle/delete.
 
 ```
-1 ·        2 ABC     3 DEF
+1 .,?!     2 ABC     3 DEF
 4 GHI      5 JKL     6 MNO
 7 PQRS     8 TUV     9 WXYZ
-* del      0 space   # next
+* next     0 space   # del
 ```
 
 Every key also does something extra on long-press: a number inserts its own digit
-as a literal character, `*` clears the whole input, and `#` toggles manual
+as a literal character, `#` clears the whole input, and `*` toggles manual
 multi-tap spelling mode (see "Feature set," above) for words the dictionary
 doesn't have.
 
@@ -197,8 +200,8 @@ Two numbers to beat, established with the trie alone before any ranking is added
    rather than the originally-imagined usage-frequency reranking
 6. n-gram reranking, measure the delta
 7. Phrase-level rescoring pass
-8. Decide on the escape hatch from real error rates — resolved: long-press `#` for
-   manual multi-tap spelling, long-press a number/`*` for literal digits/reset
+8. Decide on the escape hatch from real error rates — resolved: long-press `*` for
+   manual multi-tap spelling, long-press a number/`#` for literal digits/reset
 
 ## Future improvements
 
